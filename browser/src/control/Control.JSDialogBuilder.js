@@ -2239,6 +2239,22 @@ L.Control.JSDialogBuilder = L.Control.extend({
 				isRealUnoCommand = false;
 			}
 			id = id.replace(/\./g, '-');
+
+			// every instance of uno button will get the same class to share css
+			// but the id will be different (with counter) - for a11y
+			L.DomUtil.addClass(div, 'uno' + id);
+
+			var counter = 0;
+			var found = document.querySelector('[id=' + id + ']');
+
+			while (found) {
+				counter++;
+				found = document.querySelector('[id=' + id + counter + ']');
+			}
+
+			if (counter)
+				id = id + counter;
+
 			div.id = id;
 
 			var icon = data.icon ? data.icon : builder._createIconURL(data.command);
