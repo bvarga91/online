@@ -68,6 +68,14 @@
 	border-top: 1px solid #bbbbbb;
 }
 
+#tb_actionbar_item_prev .w2ui-icon.prev {
+	background: url('images/lc_prevrecord.svg') no-repeat center/24px !important;
+}
+
+#tb_actionbar_item_next .w2ui-icon.next {
+	background: url('images/lc_nextrecord.svg') no-repeat center/24px !important;
+}
+
 w2ui-toolbar {
 	position: absolute;
 	right: 10px;
@@ -119,6 +127,12 @@ w2ui-toolbar {
 	margin-top: -1px;
 	border-bottom: none;
 	box-sizing: border-box;
+}
+
+.w2ui-toolbar .w2ui-break {
+	height: 18px;
+	background-image: none;
+	background-color: #f1f1f1;
 }
 
 /* For MS Edge 40, the select2 combo boxes need to have higher z-index than #map
@@ -504,6 +518,23 @@ button.leaflet-control-search-next
 	border: 1px solid #888;
 }
 
+.w2ui-toolbar table.w2ui-button {
+	background-color: transparent;
+	border: 1px solid transparent;
+	color: var(--gray-light-txt--color);
+}
+.w2ui-toolbar table.w2ui-button.checked {
+	background-color: var(--gray-light-bg-color);
+	border: 1px solid var(--gray-light-bg-color);
+	color: var(--gray-light-txt--color);
+}
+.select2-container--default .select2-selection--single:hover,
+.sidebar.jsdialog.ui-listbox:hover,
+.w2ui-toolbar table.w2ui-button.checked:hover {
+	background-color: var(--gray-light-bg-color);
+	border: 1px solid var(--gray-light-txt--color);
+}
+
 .w2ui-icon.basicshapes_rectangle { background: url('images/lc_rect.svg') no-repeat center !important; }
 .w2ui-icon.basicshapes_round-rectangle { background: url('images/lc_rect_rounded.svg') no-repeat center !important; }
 .w2ui-icon.basicshapes_quadrat { background: url('images/lc_square.svg') no-repeat center !important; }
@@ -872,7 +903,7 @@ button.leaflet-control-search-next
 .w2ui-icon.fullscreen-presentation{ background: url('images/lc_fullscreen-presentation-toolbar-mobile.svg') no-repeat center !important;}
 .w2ui-icon.mobile_comment_wizard{ background: url('images/lc_mobile_comment_wizard.svg') no-repeat center !important; }
 .w2ui-icon.insertion_mobile_wizard{ background: url('images/lc_insertion_mobile_wizard.svg') no-repeat center !important; }
-.w2ui-icon.viewcomments{ background: url('images/lc_viewcomment.svg') no-repeat center !important; }
+.w2ui-icon.viewcomments{ background: url('images/lc_mobile_comment_wizard.svg') no-repeat center !important; }
 .w2ui-icon.insertcomment{ background: url('images/lc_insertcomment.svg') no-repeat center !important; }
 .w2ui-icon.freezepanes{ background: url('images/lc_freezepanes.svg') no-repeat center !important; }
 .w2ui-icon.freezepanescolumn{ background: url('images/lc_freezepanescolumn.svg') no-repeat center !important; }

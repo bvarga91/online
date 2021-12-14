@@ -43,8 +43,6 @@ L.Control.JSDialogBuilder = L.Control.extend({
 
 	_currentDepth: 0,
 
-	_firstDialogHandled: false,
-
 	setWindowId: function (id) {
 		this.windowId = id;
 	},
@@ -267,7 +265,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			// In that state the document is not really loaded and closing or cancelling it
 			// returns docnotloaded error. Instead of this we can return to the integration
 			if (!builder.map._docLoaded &&
-				 !this._firstDialogHandled &&
+				 !window._firstDialogHandled &&
 				 ((object.id === 'cancel' || eventType === 'close') ||
 				 (objectType === 'responsebutton' && (data == 0 || data == 7)))) {
 				window.onClose();
@@ -282,7 +280,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 				+ '\", \"data\": \"' + (typeof(data) === 'object' ? encodeURIComponent(JSON.stringify(data)) : data)
 				+ '\", \"type\": \"' + objectType + '\"}';
 			app.socket.sendMessage(message);
-			this._firstDialogHandled = true;
+			window._firstDialogHandled = true;
 		}
 	},
 
@@ -2215,6 +2213,21 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			parentContainer);
 	},
 
+	_makeIdUnique: function(id) {
+		var counter = 0;
+		var found = document.querySelector('[id="' + id + '"]');
+
+		while (found) {
+			counter++;
+			found = document.querySelector('[id="' + id + counter + '"]');
+		}
+
+		if (counter)
+			id = id + counter;
+
+		return id;
+	},
+
 	_unoToolButton: function(parentContainer, data, builder, options) {
 		var button = null;
 
@@ -2236,12 +2249,17 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			var id = data.id;
 			var isUnoCommand = data.command && data.command.indexOf('.uno:') >= 0;
 			if (isUnoCommand)
-				id = encodeURIComponent(data.command.substr('.uno:'.length)).replace(/\%/g, '');
+				id = encodeURIComponent(data.command.substr('.uno:'.length));
 			else {
 				id = data.command;
 				isRealUnoCommand = false;
 			}
-			id = id.replace(/\./g, '-');
+			id = id.replace(/\%/g, '').replace(/\./g, '-').replace(' ', '');
+
+			L.DomUtil.addClass(div, 'uno' + id);
+
+			id = builder._makeIdUnique(id);
+
 			div.id = id;
 
 			var icon = data.icon ? data.icon : builder._createIconURL(data.command);

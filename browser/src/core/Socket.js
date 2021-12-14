@@ -285,11 +285,32 @@ app.definitions.Socket = L.Class.extend({
 
 	_emitSlurpedEvents: function() {
 		var queueLength = this._slurpQueue.length;
-		var completeEventWholeFunction = this.createCompleteTraceEvent('cool._emitSlurpedEvents',
+		var completeEventWholeFunction = this.createCompleteTraceEvent('emitSlurped-' + String(queueLength),
 									       {'_slurpQueue.length' : String(queueLength)});
 		if (this._map && this._map._docLayer) {
 			this._map._docLayer.pauseDrawing();
+
+			// Queue an instant timeout early to try to measure the
+			// re-rendering delay before we get back to the main-loop.
+			if (this.traceEventRecordingToggle)
+			{
+				var that = this;
+				if (!that._renderEventTimer)
+					that._renderEventTimer = setTimeout(function() {
+						var now = performance.now();
+						var delta = now - that._renderEventTimerStart;
+						if (delta >= 2 /* ms */) // significant
+						{
+							that.sendMessage('TRACEEVENT name=browser-render' +
+									 ' ph=X ts=' + Math.round(that._renderEventTimerStart * 1000) +
+									 ' dur=' + Math.round((now - that._renderEventTimerStart) * 1000));
+							that._renderEventTimerStart = undefined;
+						}
+						that._renderEventTimer = undefined;
+					}, 0);
+			}
 		}
+
 		// console.log2('Slurp events ' + that._slurpQueue.length);
 		var complete = true;
 		try {
@@ -305,8 +326,7 @@ app.definitions.Socket = L.Class.extend({
 						textMsg = evt.textMsg.replace(/\s+/g, '.');
 					}
 
-					var completeEventOneMessage = this.createCompleteTraceEvent('cool._emitOneSlurpedEvent',
-												    { message: textMsg });
+					var completeEventOneMessage = this.createCompleteTraceEventFromEvent(textMsg);
 					try {
 						// it is - are you ?
 						this._onMessage(evt);
@@ -344,6 +364,8 @@ app.definitions.Socket = L.Class.extend({
 			}
 			// Let other layers / overlays catch up.
 			this._map.fire('messagesdone');
+
+			this._renderEventTimerStart = performance.now();
 		}
 	},
 
@@ -449,7 +471,7 @@ app.definitions.Socket = L.Class.extend({
 			if (e.image.completeTraceEvent)
 				e.image.completeTraceEvent.abort();
 		};
-		e.image.completeTraceEvent = this.createCompleteTraceEvent('cool._extractTextImg');
+		e.image.completeTraceEvent = this.createAsyncTraceEvent('loadTile');
 		e.image.src = img;
 	},
 
@@ -778,7 +800,7 @@ app.definitions.Socket = L.Class.extend({
 			return;
 		}
 		else if (textMsg.startsWith('error:')
-			&& (command.errorCmd === 'storage' || command.errorCmd === 'saveas')) {
+			&& (command.errorCmd === 'storage' || command.errorCmd === 'saveas') || command.errorCmd === 'downloadas')  {
 
 			if (command.errorCmd === 'saveas') {
 				this._map.fire('postMessage', {
@@ -804,6 +826,9 @@ app.definitions.Socket = L.Class.extend({
 			else if (command.errorKind === 'saveunauthorized') {
 				storageError = errorMessages.storage.saveunauthorized;
 			}
+			else if (command.errorKind === 'saveasfailed') {
+				storageError = errorMessages.storage.saveasfailed;
+			}
 			else if (command.errorKind === 'loadfailed') {
 				storageError = errorMessages.storage.loadfailed;
 				// Since this is a document load failure, wsd will disconnect the socket anyway,
@@ -819,31 +844,62 @@ app.definitions.Socket = L.Class.extend({
 				vex.closeAll();
 
 				var dialogButtons = [
-					$.extend({}, vex.dialog.buttons.YES, { text: _('Discard'),
+					$.extend({}, vex.dialog.buttons.YES, {
+						text: _('Discard'),
+						className: 'vex-dialog-button-secondary',
 						click: function() {
 							this.value = 'discard';
 							this.close();
 						}}),
-					$.extend({}, vex.dialog.buttons.YES, { text: _('Overwrite'),
+					$.extend({}, vex.dialog.buttons.YES, {
+						text: _('Overwrite'),
+						className: 'vex-dialog-button-secondary',
 						click: function() {
 							this.value = 'overwrite';
 							this.close();
-						}})
+						}}),
+					$.extend({}, vex.dialog.buttons.YES, {
+						text: '',
+						className: 'vex-dialog-button-spacer'
+					})
 				];
 
 				if (!that._map['wopi'].UserCanNotWriteRelative) {
-					dialogButtons.push($.extend({}, vex.dialog.buttons.YES, { text: _('Save to new file'),
-						click: function() {
-							this.value = 'saveas';
-							this.close();
-						}}));
+					dialogButtons.push(
+						$.extend({}, vex.dialog.buttons.YES, {
+							text: _('Save to new file'),
+							className: 'vex-dialog-button-primary',
+							click: function() {
+								this.value = 'saveas';
+								this.close();
+							}}),
+						$.extend({}, vex.dialog.buttons.YES, {
+							text: _('Cancel'),
+							className: 'vex-dialog-button-secondary vex-dialog-button-cancel',
+							click: function() {
+								this.value = 'cancel';
+								this.close();
+							}})
+					);
+				} else {
+					dialogButtons.push(
+						$.extend({}, vex.dialog.buttons.YES, {
+							text: _('Cancel'),
+							className: 'vex-dialog-button-primary vex-dialog-button-cancel',
+							click: function() {
+								this.value = 'cancel';
+								this.close();
+							}})
+					);
 				}
 
 				vex.dialog.open({
-					message: _('Document has been changed in storage. What would you like to do with your unsaved changes?'),
+					unsafeMessage: '<h1 class="vex-dialog-title">' + vex._escapeHtml(_('Document has been changed')) + '</h1><p class="vex-dialog-message">' + vex._escapeHtml(_('Document has been changed in storage. What would you like to do with your unsaved changes?')) + '</p>',
 					escapeButtonCloses: false,
 					overlayClosesOnClick: false,
+					contentClassName: 'vex-content vex-3btns',
 					buttons: dialogButtons,
+					showCloseButton: true,
 					callback: function(value) {
 						if (value === 'discard') {
 							// They want to refresh the page and load document again for all
@@ -953,6 +1009,7 @@ app.definitions.Socket = L.Class.extend({
 			if (passwordNeeded) {
 				// Ask the user for password
 				vex.dialog.open({
+					contentClassName: 'vex-has-inputs',
 					message: msg,
 					input: '<input name="password" type="password" required />',
 					buttons: [
@@ -1612,6 +1669,22 @@ app.definitions.Socket = L.Class.extend({
 		return command;
 	},
 
+	setTraceEventLogging: function (enabled) {
+		this.traceEventRecordingToggle = enabled;
+		this.sendMessage('traceeventrecording ' + (this.traceEventRecordingToggle ? 'start' : 'stop'));
+
+		// Just as a test, uncomment this to toggle SAL_WARN and
+		// SAL_INFO selection between two states: 1) the default
+		// as directed by the SAL_LOG environment variable, and
+		// 2) all warnings on plus SAL_INFO for sc.
+		//
+		// (Note that coolwsd sets the SAL_LOG environment variable
+		// to "-WARN-INFO", i.e. the default is that nothing is
+		// logged from core.)
+
+		// app.socket.sendMessage('sallogoverride ' + (app.socket.traceEventRecordingToggle ? '+WARN+INFO.sc' : 'default'));
+	},
+
 	traceEventRecordingToggle: false,
 
 	_stringifyArgs: function (args) {
@@ -1627,28 +1700,38 @@ app.definitions.Socket = L.Class.extend({
 
 	asyncTraceEventCounter: 0,
 
+	// simulate a threads per live async event to help the chrome renderer
+	asyncTracePseudoThread: 1,
+
 	createAsyncTraceEvent: function (name, args) {
 		if (!this.traceEventRecordingToggle)
 			return null;
 
 		var result = {};
 		result.id = this.asyncTraceEventCounter++;
+		result.tid = this.asyncTracePseudoThread++;
 		result.active = true;
 		result.args = args;
 
 		if (this.traceEventRecordingToggle)
-			this.sendMessage('TRACEEVENT name=' + name + ' ph=S ts=' + Math.round(performance.now() * 1000) + ' id=' + result.id
-					 + this._stringifyArgs(args));
+			this.sendMessage('TRACEEVENT name=' + name +
+					 ' ph=S ts=' + Math.round(performance.now() * 1000) +
+					 ' id=' + result.id + ' tid=' + result.tid +
+					 this._stringifyArgs(args));
 
 		var that = this;
 		result.finish = function () {
+			that.asyncTracePseudoThread--;
 			if (this.active) {
-				that.sendMessage('TRACEEVENT name=' + name + ' ph=F ts=' + Math.round(performance.now() * 1000) + ' id=' + this.id
-						 + that._stringifyArgs(this.args));
+				that.sendMessage('TRACEEVENT name=' + name +
+						 ' ph=F ts=' + Math.round(performance.now() * 1000) +
+						 ' id=' + this.id + ' tid=' + this.tid +
+						 that._stringifyArgs(this.args));
 				this.active = false;
 			}
 		};
 		result.abort = function () {
+			that.asyncTracePseudoThread--;
 			this.active = false;
 		};
 		return result;
@@ -1666,7 +1749,9 @@ app.definitions.Socket = L.Class.extend({
 		result.finish = function () {
 			if (this.active) {
 				var now = performance.now();
-				that.sendMessage('TRACEEVENT name=' + name + ' ph=X ts=' + Math.round(now * 1000) + ' dur=' + Math.round((now - this.begin) * 1000)
+				that.sendMessage('TRACEEVENT name=' + name +
+						 ' ph=X ts=' + Math.round(this.begin * 1000) +
+						 ' dur=' + Math.round((now - this.begin) * 1000)
 						 + that._stringifyArgs(args));
 				this.active = false;
 			}
@@ -1675,6 +1760,26 @@ app.definitions.Socket = L.Class.extend({
 			this.active = false;
 		};
 		return result;
+	},
+
+	// something we can grok quickly in the trace viewer
+	createCompleteTraceEventFromEvent: function(textMsg) {
+		if (!this.traceEventRecordingToggle)
+			return null;
+
+		var pretty;
+		if (!textMsg)
+			pretty = 'blob';
+		else {
+			var idx = textMsg.indexOf(':');
+			if (idx > 0)
+				pretty = textMsg.substring(0,idx);
+			else if (textMsg.length < 25)
+				pretty = textMsg;
+			else
+				pretty = textMsg.substring(0, 25);
+		}
+		return this.createCompleteTraceEvent(pretty, { message: textMsg });
 	},
 
 	threadLocalLoggingLevelToggle: false

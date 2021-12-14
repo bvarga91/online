@@ -134,9 +134,12 @@ L.Map.include({
 		vex.dialog.prompt({
 			message: _('Enter a file name'),
 			placeholder: _('filename'),
+			value: fileName.substring(0, fileName.lastIndexOf('.')) + '.' + saveAsFormat,
 			callback: function (value) {
 				if (!value) return;
-				that.saveAs(value + '.' + saveAsFormat, saveAsFormat);
+				if (value.substring(value.lastIndexOf('.') + 1) !== saveAsFormat)
+					value = value + '.' + saveAsFormat;
+				that.saveAs(value, saveAsFormat);
 			}
 		});
 	},
@@ -149,6 +152,13 @@ L.Map.include({
 			var fileName = this['wopi'].BaseFileName;
 			var extension = this._getFileExtension(fileName);
 			var extensionInfo = this.readonlyStartingFormats[extension];
+
+			var buttonList = [];
+			if (!this['wopi'].UserCanNotWriteRelative) {
+				buttonList.push($.extend({}, vex.dialog.buttons.YES, { text: _('Save as ODF format') }));
+			}
+			buttonList.push($.extend({}, vex.dialog.buttons.NO, { text: extensionInfo.canEdit ? _('Continue editing') : _('Continue read only')}));
+
 			vex.dialog.open({
 				message: _('This document may contain formatting or content that cannot be saved in the current file format.'),
 				overlayClosesOnClick: false,
@@ -160,10 +170,7 @@ L.Map.include({
 						this._proceedEditMode();
 					}
 				}, that),
-				buttons: [
-					$.extend({}, vex.dialog.buttons.YES, { text: _('Save as ODF format') }),
-					$.extend({}, vex.dialog.buttons.NO, { text: extensionInfo.canEdit ? _('Continue editing') : _('Continue read only')})
-				]
+				buttons: buttonList
 			});
 		} else {
 			this._proceedEditMode();

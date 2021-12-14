@@ -1689,6 +1689,10 @@ L.CanvasTileLayer = L.Layer.extend({
 			}
 			this._debugInit();
 		}
+		if (app.socket.traceEventRecordingToggle)
+			this._map.addLayer(this._debugTrace);
+		else
+			this._map.removeLayer(this._debugTrace);
 	},
 
 	_onCommandValuesMsg: function (textMsg) {
@@ -3438,7 +3442,9 @@ L.CanvasTileLayer = L.Layer.extend({
 
 			var hasMobileWizardOpened = this._map.uiManager.mobileWizard ? this._map.uiManager.mobileWizard.isOpen() : false;
 			// Don't show the keyboard when the Wizard is visible.
-			if (!window.mobileWizard && !window.pageMobileWizard && !window.insertionMobileWizard && !hasMobileWizardOpened) {
+			if (!window.mobileWizard && !window.pageMobileWizard &&
+				!window.insertionMobileWizard && !hasMobileWizardOpened &&
+				!this._isAnyInputFocused()) {
 				// If the user is editing, show the keyboard, but don't change
 				// anything if nothing is changed.
 
@@ -4603,6 +4609,7 @@ L.CanvasTileLayer = L.Layer.extend({
 			this._tilesDevicePixelGrid = new L.LayerGroup();
 			this._debugSidebar = new L.LayerGroup();
 			this._debugTyper = new L.LayerGroup();
+			this._debugTrace = new L.LayerGroup();
 			this._map.addLayer(this._debugInfo);
 			this._map.addLayer(this._debugInfo2);
 			var overlayMaps = {
@@ -4613,6 +4620,7 @@ L.CanvasTileLayer = L.Layer.extend({
 				'Typing': this._debugTyper,
 				'Tiles device pixel grid': this._tilesDevicePixelGrid,
 				'Sidebar Rerendering': this._debugSidebar,
+				'Performance Tracing': this._debugTrace,
 			};
 			L.control.layers({}, overlayMaps, {collapsed: false}).addTo(this._map);
 
@@ -4632,6 +4640,8 @@ L.CanvasTileLayer = L.Layer.extend({
 					this._map._docLayer._painter._sectionContainer.reNewAllSections(true);
 				} else if (e.layer === this._debugSidebar) {
 					this._map._debugSidebar = true;
+				} else if (e.layer === this._debugTrace) {
+					app.socket.setTraceEventLogging(true);
 				}
 			}, this);
 			this._map.on('layerremove', function(e) {
@@ -4650,6 +4660,8 @@ L.CanvasTileLayer = L.Layer.extend({
 					this._map._docLayer._painter._sectionContainer.reNewAllSections(true);
 				} else if (e.layer === this._debugSidebar) {
 					this._map._debugSidebar = false;
+				} else if (e.layer === this._debugTrace) {
+					app.socket.setTraceEventLogging(false);
 				}
 			}, this);
 		}
@@ -5707,6 +5719,13 @@ L.CanvasTileLayer = L.Layer.extend({
 		// Calc: do not set view area too early after load and before we get the cursor position.
 		if (this.isCalc() && !this._gotFirstCellCursor)
 			return;
+
+		// be sure canvas is initialized already and has correct size
+		var size = map.getSize();
+		if (size.x === 0 || size.y === 0) {
+			setTimeout(function () { this._update(); }.bind(this), 1);
+			return;
+		}
 
 		if (app.file.fileBasedView) {
 			this._updateFileBasedView();
